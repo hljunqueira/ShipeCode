@@ -1,0 +1,5 @@
+{
+  "name": "ShipCode OS",
+  "description": "Um sistema operacional de projetos white-label para estúdios de desenvolvimento e agências, com arquitetura multi-tenant, financeiro integrado, contratos obrigatórios e gestão de projetos via IA.",
+  "requestFramePermissions": []
+}
