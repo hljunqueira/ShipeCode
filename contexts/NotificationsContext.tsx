@@ -73,7 +73,7 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
                     type: n.type as 'info' | 'success' | 'warning' | 'error',
                     title: n.title,
                     message: n.message,
-                    read: n.is_read, // DB column is usually is_read
+                    read: n.read, // DB column is 'read'
                     createdAt: n.created_at,
                     action: n.data?.action
                 }));
@@ -104,7 +104,7 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
                         type: newNotif.type,
                         title: newNotif.title,
                         message: newNotif.message,
-                        read: newNotif.is_read,
+                        read: newNotif.read,
                         createdAt: newNotif.created_at,
                         action: newNotif.data?.action
                     }, ...prev]);
@@ -142,7 +142,7 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
                 type: notification.type,
                 title: notification.title,
                 message: notification.message,
-                is_read: false,
+                read: false,
                 data: { action: notification.action }
             });
 
@@ -162,7 +162,7 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
         ));
 
         // DB Update
-        await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+        await supabase.from('notifications').update({ read: true }).eq('id', id);
     }, []);
 
     const markAllAsRead = useCallback(async () => {
@@ -172,9 +172,9 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
 
         await supabase
             .from('notifications')
-            .update({ is_read: true })
+            .update({ read: true })
             .eq('user_id', currentUser.id)
-            .eq('is_read', false);
+            .eq('read', false);
     }, [currentUser]);
 
     const removeNotification = useCallback(async (id: string) => {
