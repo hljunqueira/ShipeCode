@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Github, Linkedin, Mail, Users } from 'lucide-react';
-import { User, Role } from '../types';
+import { User } from '../types';
 import { useDraggableScroll } from '../hooks/useDraggableScroll';
-import InviteMemberModal from '../components/modals/InviteMemberModal';
+import AddMemberModal from '../components/modals/AddMemberModal';
 import { useNotifications } from '../contexts/NotificationsContext';
+import { supabase } from '../lib/supabaseClient';
+import { createClient } from '@supabase/supabase-js';
 
 interface TeamScreenProps {
     users: User[];
@@ -13,29 +15,115 @@ interface TeamScreenProps {
 /**
  * Tela de gestão da equipe
  */
-const TeamScreen: React.FC<TeamScreenProps> = ({ users }) => {
+const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
     const scrollRef = useDraggableScroll();
     const navigate = useNavigate();
     const { addNotification } = useNotifications();
-    const [showInviteModal, setShowInviteModal] = useState(false);
+    const [showAddModal, setShowAddModal] = useState(false);
 
-    const handleInvite = (email: string, role: Role, name: string) => {
-        // Simula envio de convite
-        addNotification({
-            type: 'success',
-            title: 'Convite Enviado',
-            message: `Um convite foi enviado para ${email} como ${role}.`,
-        });
+    // Local state to show new users immediately (though app context usually handles this)
+    // For now we assume the parent re-renders or we might redirect? 
+    // Actually the props `users` come from App.tsx/AppDataContext. 
+    // We should ideally reload the context, but let's just rely on Supabase realtime or reload.
+
+    const handleAddMember = async (formData: any): Promise<boolean> => {
+        try {
+            // 1. Create a temporary client to sign up the new user without logging out the admin
+            // We use the same env vars
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+            const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
+                auth: {
+                    persistSession: false, // Don't save this session
+                    autoRefreshToken: false,
+                    detectSessionInUrl: false
+                }
+            });
+
+            // 2. Sign Up User (Creates Auth User)
+            const { data: authData, error: authError } = await tempClient.auth.signUp({
+                email: formData.email,
+                password: formData.password,
+                options: {
+                    data: {
+                        full_name: formData.name
+                    }
+                }
+            });
+
+            if (authError) {
+                console.error("Auth Error:", authError);
+                addNotification({
+                    type: 'error',
+                    title: 'Erro no Cadastro',
+                    message: authError.message || 'Não foi possível criar o usuário.'
+                });
+                return false;
+            }
+
+            if (!authData.user) {
+                return false;
+            }
+
+            // 3. Insert Profile (Using Admin Client to bypass RLS restrictions if any, or just regular flow)
+            // Note: If RLS on 'profiles' allows INSERT by authenticated users, this works.
+            // If it only allows insert by 'self', then we have a problem because we are Admin.
+            // But usually 'profiles' table has a policy "Enable insert for authenticated users only" 
+            // OR "Enable insert for users based on user_id".
+
+            // Wait, standard RLS often says "Users can create their own profile". 
+            // BUT we are creating it FOR them.
+            // If our Policy is "INSERT WITH CHECK (auth.uid() = id)", then Admin CANNOT insert for others.
+            // UNLESS we update the policy to allow Admins to insert.
+
+            // Let's TRY to insert. If it fails, we will know.
+            const { error: profileError } = await supabase.from('profiles').insert([{
+                id: authData.user.id,
+                name: formData.name,
+                email: formData.email,
+                role: formData.role,
+                avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&background=random`
+            }]);
+
+            if (profileError) {
+                console.error("Profile Error:", profileError);
+                // If this fails, the auth user exists but has no profile.
+                addNotification({
+                    type: 'warning',
+                    title: 'Usuário Criado (Parcial)',
+                    message: `A conta foi criada, mas o perfil falhou: ${profileError.message}. O usuário precisará contatar o suporte.`
+                });
+                return true;
+            }
+
+            addNotification({
+                type: 'success',
+                title: 'Membro Adicionado',
+                message: `${formData.name} foi adicionado à equipe com sucesso.`,
+            });
+
+            return true;
+
+        } catch (err: any) {
+            console.error("Exception:", err);
+            addNotification({
+                type: 'error',
+                title: 'Erro Inesperado',
+                message: err.message
+            });
+            return false;
+        }
     };
 
     return (
         <div className="h-screen w-screen bg-[#050505] flex flex-col relative overflow-hidden">
 
-            {/* Invite Modal */}
-            <InviteMemberModal
-                isOpen={showInviteModal}
-                onClose={() => setShowInviteModal(false)}
-                onInvite={handleInvite}
+            {/* Add Member Modal */}
+            <AddMemberModal
+                isOpen={showAddModal}
+                onClose={() => setShowAddModal(false)}
+                onAdd={handleAddMember}
             />
 
             {/* Immersive Header */}
@@ -44,22 +132,24 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users }) => {
                     <button onClick={() => navigate('/')} className="w-10 h-10 rounded-full bg-zinc-900/50 backdrop-blur border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white hover:border-cyan-500 transition-all group">
                         <ArrowLeft size={18} className="group-hover:-translate-x-0.5 transition-transform" />
                     </button>
-                    <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
-                        Rede da Equipe <span className="text-zinc-600 text-lg font-normal">/ Talents</span>
-                    </h1>
+                    <div>
+                        <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+                            Rede da Equipe <span className="text-zinc-600 text-lg font-normal">/ Talents</span>
+                        </h1>
+                    </div>
                 </div>
                 <button
-                    onClick={() => setShowInviteModal(true)}
+                    onClick={() => setShowAddModal(true)}
                     className="pointer-events-auto bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2 shadow-[0_0_20px_rgba(8,145,178,0.3)] transition-all hover:scale-105"
                 >
-                    <Plus size={16} /> Convidar Membro
+                    <Plus size={16} /> Adicionar Membro
                 </button>
             </div>
 
             {/* Team Stream - Compact Tag Cards */}
             <div ref={scrollRef} className="flex-1 flex items-center overflow-x-auto px-40 gap-8 hide-scrollbar cursor-grab active:cursor-grabbing">
                 <div className="fixed top-1/2 left-0 w-full h-[1px] bg-zinc-800 z-0 pointer-events-none"></div>
-                {users.map((user, index) => {
+                {initialUsers.map((user, index) => {
                     const isEven = index % 2 === 0;
                     return (
                         <div key={user.id} className={`snap-center shrink-0 relative w-[240px] group cursor-pointer perspective-1000 ${isEven ? '-translate-y-14' : 'translate-y-14'}`}>
@@ -117,7 +207,7 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users }) => {
                                         )}
                                     </div>
                                     <div className="text-[10px] font-mono text-zinc-600">
-                                        ID: {user.id}
+                                        ID: {user.id.substring(0, 4)}...
                                     </div>
                                 </div>
                             </div>
