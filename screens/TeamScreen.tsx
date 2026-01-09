@@ -4,6 +4,7 @@ import { ArrowLeft, Plus, Github, Linkedin, Mail, Users, Trash2 } from 'lucide-r
 import { User } from '../types';
 import { useDraggableScroll } from '../hooks/useDraggableScroll';
 import AddMemberModal from '../components/modals/AddMemberModal';
+import EditMemberModal from '../components/modals/EditMemberModal';
 import { useNotifications } from '../contexts/NotificationsContext';
 import { supabase } from '../lib/supabaseClient';
 import { createClient } from '@supabase/supabase-js';
@@ -20,6 +21,7 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
     const navigate = useNavigate();
     const { addNotification } = useNotifications();
     const [showAddModal, setShowAddModal] = useState(false);
+    const [editingUser, setEditingUser] = useState<User | null>(null);
 
     // Note: initialUsers comes from Props. We can't mutate props.
     // Ideally we should use AppDataContext `users` or a local state initialized from props.
@@ -42,7 +44,12 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
             const { data: authData, error: authError } = await tempClient.auth.signUp({
                 email: formData.email,
                 password: formData.password,
-                options: { data: { full_name: formData.name } }
+                options: {
+                    data: {
+                        full_name: formData.name,
+                        role: formData.role
+                    }
+                }
             });
 
             if (authError) {
@@ -52,13 +59,13 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
 
             if (!authData.user) return { success: false, error: "Erro ao criar usuário." };
 
-            const { error: profileError } = await supabase.from('profiles').insert([{
+            const { error: profileError } = await supabase.from('profiles').upsert({
                 id: authData.user.id,
                 name: formData.name,
                 email: formData.email,
                 role: formData.role,
                 avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&background=random`
-            }]);
+            });
 
             if (profileError) {
                 console.error("Profile Error:", profileError);
@@ -113,14 +120,57 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
         }
     };
 
+    const handleUpdateMember = async (userId: string, data: Partial<User>): Promise<boolean> => {
+        try {
+            const { error } = await supabase.from('profiles').update({
+                name: data.name,
+                role: data.role
+            }).eq('id', userId);
+
+            if (error) {
+                addNotification({
+                    type: 'error',
+                    title: 'Erro ao atualizar',
+                    message: error.message
+                });
+                return false;
+            }
+
+            addNotification({
+                type: 'success',
+                title: 'Membro Atualizado',
+                message: 'Informações salvas com sucesso.'
+            });
+            // Ideally trigger refresh here, but realtime/reload might handle it
+            // window.location.reload(); 
+            return true;
+        } catch (err: any) {
+            addNotification({
+                type: 'error',
+                title: 'Erro',
+                message: err.message
+            });
+            return false;
+        }
+    };
+
     return (
         <div className="h-screen w-screen bg-[#050505] flex flex-col relative overflow-hidden">
 
+            {/* Add Member Modal */}
             {/* Add Member Modal */}
             <AddMemberModal
                 isOpen={showAddModal}
                 onClose={() => setShowAddModal(false)}
                 onAdd={handleAddMember}
+            />
+
+            {/* Edit Member Modal */}
+            <EditMemberModal
+                isOpen={!!editingUser}
+                onClose={() => setEditingUser(null)}
+                user={editingUser}
+                onUpdate={handleUpdateMember}
             />
 
             {/* Immersive Header */}
@@ -158,7 +208,10 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
                             <div className="fixed top-1/2 ml-[119px] w-2.5 h-2.5 rounded-full z-0 transition-all duration-500 border-2 border-[#050505] bg-zinc-700 group-hover:bg-cyan-500 shadow-sm"></div>
 
                             {/* Card Container - Compact */}
-                            <div className="relative z-10 bg-zinc-900/90 backdrop-blur-md border border-zinc-800 rounded-xl p-4 transition-all duration-500 transform group-hover:scale-105 group-hover:border-cyan-500/30 group-hover:shadow-[0_15px_30px_-10px_rgba(0,0,0,0.5)]">
+                            <div
+                                onClick={() => setEditingUser(user)}
+                                className="relative z-10 bg-zinc-900/90 backdrop-blur-md border border-zinc-800 rounded-xl p-4 transition-all duration-500 transform group-hover:scale-105 group-hover:border-cyan-500/30 group-hover:shadow-[0_15px_30px_-10px_rgba(0,0,0,0.5)]"
+                            >
 
                                 {/* Delete Hover Button */}
                                 <button

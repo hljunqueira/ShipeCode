@@ -29,10 +29,15 @@ const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose, onAdd 
         setIsLoading(true);
         setErrorMsg(null);
 
+        // Aggressive sanitization
+        const cleanEmail = form.email.replace(/\s/g, '').toLowerCase(); // Remove ALL spaces and lowercase
+
+        console.log(`[AddMember] Attempting signup for: '${cleanEmail}' (Length: ${cleanEmail.length})`);
+
         const cleanData = {
             ...form,
             name: form.name.trim(),
-            email: form.email.trim(),
+            email: cleanEmail,
             password: form.password.trim()
         };
 

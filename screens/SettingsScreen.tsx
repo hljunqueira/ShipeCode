@@ -98,7 +98,12 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
             const { data: authData, error: authError } = await tempClient.auth.signUp({
                 email: formData.email,
                 password: formData.password,
-                options: { data: { full_name: formData.name } }
+                options: {
+                    data: {
+                        full_name: formData.name,
+                        role: formData.role
+                    }
+                }
             });
 
             if (authError) {
@@ -109,13 +114,14 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
 
             if (!authData.user) return { success: false, error: 'Erro desconhecido ao criar usuário.' };
 
-            const { error: profileError } = await supabase.from('profiles').insert([{
+            // Upsert profile to overwrite trigger defaults (like Role)
+            const { error: profileError } = await supabase.from('profiles').upsert({
                 id: authData.user.id,
                 name: formData.name,
                 email: formData.email,
                 role: formData.role,
                 avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&background=random`
-            }]);
+            });
 
             if (profileError) {
                 const msg = `Conta criada, mas perfil falhou: ${profileError.message}`;
