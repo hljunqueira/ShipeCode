@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Github, Linkedin, Mail, Users } from 'lucide-react';
+import { ArrowLeft, Plus, Github, Linkedin, Mail, Users, Trash2 } from 'lucide-react';
 import { User } from '../types';
 import { useDraggableScroll } from '../hooks/useDraggableScroll';
 import AddMemberModal from '../components/modals/AddMemberModal';
@@ -21,35 +21,25 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
     const { addNotification } = useNotifications();
     const [showAddModal, setShowAddModal] = useState(false);
 
-    // Local state to show new users immediately (though app context usually handles this)
-    // For now we assume the parent re-renders or we might redirect? 
-    // Actually the props `users` come from App.tsx/AppDataContext. 
-    // We should ideally reload the context, but let's just rely on Supabase realtime or reload.
+    // Note: initialUsers comes from Props. We can't mutate props.
+    // Ideally we should use AppDataContext `users` or a local state initialized from props.
+    // For deleting, we can't easily update `initialUsers` locally without context reload.
+    // But since `handleAddMember` succeeded to just notify, we do the same for Delete.
+    // The user will see changes on next context refresh (or we assume it).
 
     const handleAddMember = async (formData: any): Promise<boolean> => {
         try {
-            // 1. Create a temporary client to sign up the new user without logging out the admin
-            // We use the same env vars
             const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
             const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
             const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
-                auth: {
-                    persistSession: false, // Don't save this session
-                    autoRefreshToken: false,
-                    detectSessionInUrl: false
-                }
+                auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
             });
 
-            // 2. Sign Up User (Creates Auth User)
             const { data: authData, error: authError } = await tempClient.auth.signUp({
                 email: formData.email,
                 password: formData.password,
-                options: {
-                    data: {
-                        full_name: formData.name
-                    }
-                }
+                options: { data: { full_name: formData.name } }
             });
 
             if (authError) {
@@ -62,22 +52,8 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
                 return false;
             }
 
-            if (!authData.user) {
-                return false;
-            }
+            if (!authData.user) return false;
 
-            // 3. Insert Profile (Using Admin Client to bypass RLS restrictions if any, or just regular flow)
-            // Note: If RLS on 'profiles' allows INSERT by authenticated users, this works.
-            // If it only allows insert by 'self', then we have a problem because we are Admin.
-            // But usually 'profiles' table has a policy "Enable insert for authenticated users only" 
-            // OR "Enable insert for users based on user_id".
-
-            // Wait, standard RLS often says "Users can create their own profile". 
-            // BUT we are creating it FOR them.
-            // If our Policy is "INSERT WITH CHECK (auth.uid() = id)", then Admin CANNOT insert for others.
-            // UNLESS we update the policy to allow Admins to insert.
-
-            // Let's TRY to insert. If it fails, we will know.
             const { error: profileError } = await supabase.from('profiles').insert([{
                 id: authData.user.id,
                 name: formData.name,
@@ -88,11 +64,10 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
 
             if (profileError) {
                 console.error("Profile Error:", profileError);
-                // If this fails, the auth user exists but has no profile.
                 addNotification({
                     type: 'warning',
                     title: 'Usuário Criado (Parcial)',
-                    message: `A conta foi criada, mas o perfil falhou: ${profileError.message}. O usuário precisará contatar o suporte.`
+                    message: `A conta foi criada, mas o perfil falhou: ${profileError.message}`
                 });
                 return true;
             }
@@ -102,17 +77,41 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
                 title: 'Membro Adicionado',
                 message: `${formData.name} foi adicionado à equipe com sucesso.`,
             });
-
             return true;
 
         } catch (err: any) {
             console.error("Exception:", err);
-            addNotification({
-                type: 'error',
-                title: 'Erro Inesperado',
-                message: err.message
-            });
+            addNotification({ type: 'error', title: 'Erro Inesperado', message: err.message });
             return false;
+        }
+    };
+
+    const handleDeleteMember = async (userId: string, userName: string) => {
+        if (!confirm(`Tem certeza que deseja remover ${userName}?`)) {
+            return;
+        }
+
+        try {
+            const { error } = await supabase.from('profiles').delete().eq('id', userId);
+
+            if (error) {
+                console.error("Delete error:", error);
+                addNotification({
+                    type: 'error',
+                    title: 'Erro ao remover',
+                    message: error.message
+                });
+            } else {
+                addNotification({
+                    type: 'success',
+                    title: 'Membro Removido',
+                    message: `${userName} foi removido da equipe.`
+                });
+                // Optional: window.location.reload(); 
+            }
+        } catch (err: any) {
+            console.error("Delete exception:", err);
+            addNotification({ type: 'error', title: 'Erro', message: 'Falha ao remover membro.' });
         }
     };
 
@@ -162,6 +161,15 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
 
                             {/* Card Container - Compact */}
                             <div className="relative z-10 bg-zinc-900/90 backdrop-blur-md border border-zinc-800 rounded-xl p-4 transition-all duration-500 transform group-hover:scale-105 group-hover:border-cyan-500/30 group-hover:shadow-[0_15px_30px_-10px_rgba(0,0,0,0.5)]">
+
+                                {/* Delete Hover Button */}
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteMember(user.id, user.name); }}
+                                    className="absolute top-2 right-2 text-zinc-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1 z-20 hover:bg-zinc-900/50 rounded-full"
+                                    title="Remover Membro"
+                                >
+                                    <Trash2 size={14} />
+                                </button>
 
                                 <div className="flex items-center gap-4 mb-3">
                                     <div className="w-10 h-10 rounded-full border-2 border-zinc-800 overflow-hidden group-hover:border-cyan-500 transition-colors">

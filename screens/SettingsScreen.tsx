@@ -6,7 +6,7 @@ import { useAppData } from '../contexts/AppDataContext';
 import { supabase } from '../lib/supabaseClient';
 import {
     Users, Plus, Loader2, Monitor, DollarSign,
-    Activity, RefreshCw, ArrowLeft, Save
+    Activity, RefreshCw, ArrowLeft, Save, Trash2
 } from 'lucide-react';
 import AddMemberModal from '../components/modals/AddMemberModal';
 import { Organization, Role } from '../types';
@@ -136,6 +136,39 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
         }
     };
 
+    const handleDeleteMember = async (userId: string, userName: string) => {
+        if (!confirm(`Tem certeza que deseja remover ${userName}? \n\nIsso removerá o acesso do usuário, mas a conta não será excluída do provedor de autenticação (requer ação no painel Supabase).`)) {
+            return;
+        }
+
+        try {
+            const { error } = await supabase.from('profiles').delete().eq('id', userId);
+
+            if (error) {
+                console.error("Delete error:", error);
+                addNotification({
+                    type: 'error',
+                    title: 'Erro ao remover',
+                    message: error.message
+                });
+            } else {
+                addNotification({
+                    type: 'success',
+                    title: 'Membro Removido',
+                    message: `${userName} foi removido da equipe.`
+                });
+                fetchTeam();
+            }
+        } catch (err: any) {
+            console.error("Delete exception:", err);
+            addNotification({
+                type: 'error',
+                title: 'Erro',
+                message: 'Falha ao remover membro.'
+            });
+        }
+    };
+
     const renderContent = () => {
         switch (activeTab) {
             case 'general':
@@ -226,7 +259,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
                                     <div className="text-center py-8 text-zinc-500"><Loader2 className="animate-spin mx-auto mb-2" />Carregando equipe...</div>
                                 ) : (
                                     teamMembers.map((member) => (
-                                        <div key={member.id} className="flex justify-between items-center p-4 bg-zinc-950 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
+                                        <div key={member.id} className="flex justify-between items-center p-4 bg-zinc-950 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors group">
                                             <div className="flex items-center gap-4">
                                                 <div className="w-10 h-10 rounded-full bg-zinc-900 flex items-center justify-center overflow-hidden border border-zinc-800">
                                                     {member.avatar_url ? (
@@ -240,9 +273,20 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
                                                     <p className="text-xs text-zinc-500 uppercase font-mono">{member.role}</p>
                                                 </div>
                                             </div>
-                                            <span className="text-xs text-zinc-600 font-mono select-all">
-                                                {member.id.substring(0, 8)}...
-                                            </span>
+                                            <div className="flex items-center gap-4">
+                                                <span className="text-xs text-zinc-600 font-mono select-all hidden sm:block">
+                                                    {member.id.substring(0, 8)}...
+                                                </span>
+                                                {isAdmin && (
+                                                    <button
+                                                        onClick={() => handleDeleteMember(member.id, member.name)}
+                                                        className="text-zinc-600 hover:text-red-500 transition-colors p-2 rounded-md hover:bg-zinc-900"
+                                                        title="Remover Membro"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     ))
                                 )}
