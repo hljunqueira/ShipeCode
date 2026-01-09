@@ -21,6 +21,7 @@ const EditMemberModal: React.FC<EditMemberModalProps> = ({ isOpen, onClose, user
     const [isLoading, setIsLoading] = useState(false);
     const [resetLoading, setResetLoading] = useState(false);
     const [resetSent, setResetSent] = useState(false);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null); // Moved BEFORE early return
 
     useEffect(() => {
         if (user) {
@@ -29,6 +30,7 @@ const EditMemberModal: React.FC<EditMemberModalProps> = ({ isOpen, onClose, user
                 role: user.role,
             });
             setResetSent(false);
+            setErrorMsg(null); // Reset error when user changes
         }
     }, [user]);
 
@@ -43,8 +45,6 @@ const EditMemberModal: React.FC<EditMemberModalProps> = ({ isOpen, onClose, user
             onClose();
         }
     };
-
-    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     const handlePasswordReset = async () => {
         if (!user.email) return;
