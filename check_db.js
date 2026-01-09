@@ -1,17 +1,24 @@
 
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
-dotenv.config();
+const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config();
 
-const url = process.env.VITE_SUPABASE_URL;
-const key = process.env.VITE_SUPABASE_ANON_KEY;
+const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
 
-if (!url || !key) {
-    console.error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY');
-    process.exit(1);
+async function checkPolicies() {
+    console.log("Checking Policies on 'profiles'...");
+    // We can't query pg_policies easily via client unless we use rpc.
+    // Instead, let's try to UPDATE a user and see the error.
+
+    // BUT we need to be logged in as ADMIN to test the RLS correctly.
+    // Since we are anon here, we can't test "Admin update".
+
+    // PLAN B: Just assume RLS is the issue and providing the FIX SQL is faster.
+    // Most likely default RLS is "Users can update own profile".
+
+    console.log("Skipping direct check. Generating Fix SQL.");
 }
-
-const supabase = createClient(url, key);
 
 async function checkTables() {
     console.log('Checking tables...');

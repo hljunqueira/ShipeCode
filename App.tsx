@@ -21,6 +21,7 @@ import NewProjectScreen from './screens/NewProjectScreen';
 import LeadsScreen from './screens/LeadsScreen';
 import TeamScreen from './screens/TeamScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import ResetPasswordScreen from './screens/ResetPasswordScreen';
 
 // Components
 // AIAssistant removido
@@ -92,6 +93,8 @@ const AppContent: React.FC = () => {
         <Route path="/login" element={
           isAuthenticated ? <Navigate to="/" replace /> : <LoginScreen />
         } />
+
+        <Route path="/reset-password" element={<ResetPasswordScreen />} />
 
         {/* Rotas protegidas */}
         <Route path="/" element={
