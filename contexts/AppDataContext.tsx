@@ -314,7 +314,7 @@ export const AppDataProvider: React.FC<AppDataProviderProps> = ({ children }) =>
                 status: lead.status,
                 source: lead.source,
                 notes: lead.notes,
-                user_id: users?.id // Add user_id if we have it, or let DB default handle it.
+                user_id: currentUser?.id // Add user_id if we have it, or let DB default handle it.
             });
             fetchData(); // Refresh to get ID
         } catch (error) {
