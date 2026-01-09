@@ -86,7 +86,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
     };
 
     // New Add Member Logic (Same as TeamScreen)
-    const handleAddMember = async (formData: any): Promise<boolean> => {
+    const handleAddMember = async (formData: any): Promise<{ success: boolean; error?: string }> => {
         try {
             const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
             const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -103,12 +103,11 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
 
             if (authError) {
                 console.error("Auth Error:", authError);
-                alert(`Erro no Cadastro: ${authError.message}`); // Force alert for visibility
-                addNotification({ type: 'error', title: 'Erro no Cadastro', message: authError.message });
-                return false;
+                // Return error to modal instead of alerting
+                return { success: false, error: authError.message };
             }
 
-            if (!authData.user) return false;
+            if (!authData.user) return { success: false, error: 'Erro desconhecido ao criar usuário.' };
 
             const { error: profileError } = await supabase.from('profiles').insert([{
                 id: authData.user.id,
@@ -121,23 +120,22 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
             if (profileError) {
                 const msg = `Conta criada, mas perfil falhou: ${profileError.message}`;
                 console.error(msg);
-                alert(msg); // Force alert
                 addNotification({
                     type: 'warning',
                     title: 'Usuário Criado (Parcial)',
                     message: msg
                 });
-                fetchTeam(); // Refresh anyway
-                return true;
+                fetchTeam();
+                return { success: true };
             }
 
             addNotification({ type: 'success', title: 'Membro Adicionado', message: `${formData.name} entrou para a equipe.` });
-            fetchTeam(); // Refresh list
-            return true;
+            fetchTeam();
+            return { success: true };
 
         } catch (err: any) {
             addNotification({ type: 'error', title: 'Erro Inesperado', message: err.message });
-            return false;
+            return { success: false, error: err.message };
         }
     };
 

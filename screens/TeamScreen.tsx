@@ -27,8 +27,10 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
     // But since `handleAddMember` succeeded to just notify, we do the same for Delete.
     // The user will see changes on next context refresh (or we assume it).
 
-    const handleAddMember = async (formData: any): Promise<boolean> => {
+    const handleAddMember = async (formData: any): Promise<{ success: boolean; error?: string }> => {
         try {
+            // 1. Create a temporary client to sign up the new user without logging out the admin
+            // We use the same env vars
             const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
             const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -36,6 +38,7 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
                 auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
             });
 
+            // 2. Sign Up User (Creates Auth User)
             const { data: authData, error: authError } = await tempClient.auth.signUp({
                 email: formData.email,
                 password: formData.password,
@@ -44,16 +47,10 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
 
             if (authError) {
                 console.error("Auth Error:", authError);
-                alert(`Erro no Cadastro: ${authError.message}`); // Force alert
-                addNotification({
-                    type: 'error',
-                    title: 'Erro no Cadastro',
-                    message: authError.message || 'Não foi possível criar o usuário.'
-                });
-                return false;
+                return { success: false, error: authError.message };
             }
 
-            if (!authData.user) return false;
+            if (!authData.user) return { success: false, error: "Erro ao criar usuário." };
 
             const { error: profileError } = await supabase.from('profiles').insert([{
                 id: authData.user.id,
@@ -70,7 +67,7 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
                     title: 'Usuário Criado (Parcial)',
                     message: `A conta foi criada, mas o perfil falhou: ${profileError.message}`
                 });
-                return true;
+                return { success: true };
             }
 
             addNotification({
@@ -78,12 +75,12 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
                 title: 'Membro Adicionado',
                 message: `${formData.name} foi adicionado à equipe com sucesso.`,
             });
-            return true;
+            return { success: true };
 
         } catch (err: any) {
             console.error("Exception:", err);
             addNotification({ type: 'error', title: 'Erro Inesperado', message: err.message });
-            return false;
+            return { success: false, error: err.message };
         }
     };
 

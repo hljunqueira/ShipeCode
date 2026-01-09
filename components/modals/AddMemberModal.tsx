@@ -5,7 +5,7 @@ import { Role } from '../../types';
 interface AddMemberModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onAdd: (data: any) => Promise<boolean>; // Async return success
+    onAdd: (data: any) => Promise<{ success: boolean; error?: string }>;
 }
 
 /**
@@ -20,22 +20,34 @@ const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose, onAdd 
     });
     const [isLoading, setIsLoading] = useState(false);
     const [sent, setSent] = useState(false);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     if (!isOpen) return null;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
-        const success = await onAdd(form);
+        setErrorMsg(null);
+
+        const cleanData = {
+            ...form,
+            name: form.name.trim(),
+            email: form.email.trim(),
+            password: form.password.trim()
+        };
+
+        const result = await onAdd(cleanData);
         setIsLoading(false);
 
-        if (success) {
+        if (result.success) {
             setSent(true);
             setTimeout(() => {
                 setSent(false);
                 setForm({ name: '', email: '', password: '', role: Role.CONTRIBUTOR });
                 onClose();
             }, 2000);
+        } else {
+            setErrorMsg(result.error || 'Erro ao criar usuário.');
         }
     };
 
@@ -73,6 +85,12 @@ const AddMemberModal: React.FC<AddMemberModalProps> = ({ isOpen, onClose, onAdd 
                     </div>
                 ) : (
                     <form onSubmit={handleSubmit} className="space-y-4">
+                        {/* Error Message */}
+                        {errorMsg && (
+                            <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-3 text-red-400 text-xs font-bold animate-in fade-in slide-in-from-top-1">
+                                {errorMsg}
+                            </div>
+                        )}
                         {/* Nome */}
                         <div className="space-y-1">
                             <label className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Nome</label>
