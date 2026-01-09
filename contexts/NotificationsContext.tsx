@@ -118,13 +118,26 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
     const unreadCount = notifications.filter(n => !n.read).length;
 
     const addNotification = useCallback(async (notification: Omit<Notification, 'id' | 'read' | 'createdAt'>) => {
+        // Create a temporary ID and local object
+        const tempId = crypto.randomUUID();
+        const newNotif: Notification = {
+            id: tempId,
+            type: notification.type,
+            title: notification.title,
+            message: notification.message,
+            read: false,
+            createdAt: new Date().toISOString(),
+            action: notification.action
+        };
+
+        // Update local state immediately (Optimistic / Local Fallback)
+        setNotifications(prev => [newNotif, ...prev]);
+
         if (!currentUser) return;
 
-        // This function is mostly used for internal optimistics or local notifications
-        // Ideally we should insert into DB.
-
         try {
-            await supabase.from('notifications').insert({
+            // Try to persist to DB
+            const { error } = await supabase.from('notifications').insert({
                 user_id: currentUser.id,
                 type: notification.type,
                 title: notification.title,
@@ -132,7 +145,11 @@ export const NotificationsProvider: React.FC<NotificationsProviderProps> = ({ ch
                 is_read: false,
                 data: { action: notification.action }
             });
-            // Subscription will pick it up
+
+            if (error) {
+                console.warn('Failed to save notification to DB (using local only):', error);
+                // We don't remove it from local state, so the user still sees it.
+            }
         } catch (error) {
             console.error('Error adding notification:', error);
         }
