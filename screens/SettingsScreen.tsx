@@ -6,9 +6,10 @@ import { useAppData } from '../contexts/AppDataContext';
 import { supabase } from '../lib/supabaseClient';
 import {
     Users, Plus, Loader2, Monitor, DollarSign,
-    Activity, RefreshCw, ArrowLeft, Save, Trash2
+    Activity, RefreshCw, ArrowLeft, Save, Trash2, Edit2
 } from 'lucide-react';
 import AddMemberModal from '../components/modals/AddMemberModal';
+import EditMemberModal from '../components/modals/EditMemberModal';
 import { Organization, Role } from '../types';
 import { useNotifications } from '../contexts/NotificationsContext';
 
@@ -20,6 +21,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
     const navigate = useNavigate();
     const { isAdmin } = useAuth();
     const { updateOrganization } = useAppData();
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [editingUser, setEditingUser] = useState<any | null>(null); // Assuming 'any' for User type for now
     const { addNotification } = useNotifications();
     const [activeTab, setActiveTab] = useState('general');
 
@@ -62,7 +65,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
     // Team Management State
     const [teamMembers, setTeamMembers] = useState<any[]>([]);
     const [isLoadingTeam, setIsLoadingTeam] = useState(false);
-    const [showAddUser, setShowAddUser] = useState(false); // Using Modal now
+    // const [showAddUser, setShowAddUser] = useState(false); // Using Modal now - replaced by showAddModal
 
     // Fetch Team
     React.useEffect(() => {
@@ -142,6 +145,27 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
         } catch (err: any) {
             addNotification({ type: 'error', title: 'Erro Inesperado', message: err.message });
             return { success: false, error: err.message };
+        }
+    };
+
+    const handleUpdateMember = async (userId: string, data: Partial<any>): Promise<boolean> => {
+        try {
+            const { error } = await supabase.from('profiles').update({
+                name: data.name,
+                role: data.role
+            }).eq('id', userId);
+
+            if (error) {
+                addNotification({ type: 'error', title: 'Erro ao atualizar', message: error.message });
+                return false;
+            }
+
+            addNotification({ type: 'success', title: 'Atualizado', message: 'Membro atualizado com sucesso.' });
+            fetchTeam();
+            return true;
+        } catch (err: any) {
+            addNotification({ type: 'error', title: 'Erro', message: err.message });
+            return false;
         }
     };
 
@@ -255,7 +279,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
                                     <Users size={18} /> Gestão da Equipe
                                 </h2>
                                 <button
-                                    onClick={() => setShowAddUser(true)}
+                                    onClick={() => setShowAddModal(true)}
                                     className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors"
                                 >
                                     <Plus size={14} /> Novo Usuário
@@ -282,10 +306,21 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
                                                     <p className="text-xs text-zinc-500 uppercase font-mono">{member.role}</p>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-4">
-                                                <span className="text-xs text-zinc-600 font-mono select-all hidden sm:block">
-                                                    {member.id.substring(0, 8)}...
-                                                </span>
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-right mr-4">
+                                                    <div className="text-sm font-mono text-zinc-600">
+                                                        {member.id.substring(0, 8)}...
+                                                    </div>
+                                                </div>
+
+                                                <button
+                                                    onClick={() => setEditingUser(member)}
+                                                    className="p-2 text-zinc-500 hover:text-cyan-500 hover:bg-zinc-900 rounded-lg transition-colors"
+                                                    title="Editar Membro"
+                                                >
+                                                    <Edit2 size={16} />
+                                                </button>
+
                                                 {isAdmin && (
                                                     <button
                                                         onClick={() => handleDeleteMember(member.id, member.name)}
@@ -316,9 +351,17 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
 
             {/* Add Member Modal */}
             <AddMemberModal
-                isOpen={showAddUser}
-                onClose={() => setShowAddUser(false)}
+                isOpen={showAddModal}
+                onClose={() => setShowAddModal(false)}
                 onAdd={handleAddMember}
+            />
+
+            {/* Edit Member Modal */}
+            <EditMemberModal
+                isOpen={!!editingUser}
+                onClose={() => setEditingUser(null)}
+                user={editingUser}
+                onUpdate={handleUpdateMember}
             />
 
             {/* Immersive Header */}
