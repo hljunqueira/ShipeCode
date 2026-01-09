@@ -211,8 +211,7 @@ export const AppDataProvider: React.FC<AppDataProviderProps> = ({ children }) =>
                     project_id: realProjectId,
                     title: t.title,
                     status: t.status,
-                    priority: 'MEDIUM', // Default
-                    organization_id: organization.id
+                    priority: 'MEDIUM' // Default
                 }));
                 await supabase.from('tasks').insert(tasksToInsert);
             }
@@ -224,8 +223,7 @@ export const AppDataProvider: React.FC<AppDataProviderProps> = ({ children }) =>
                     description: f.description,
                     amount: f.amount,
                     type: f.type,
-                    category: f.category,
-                    organization_id: organization.id
+                    category: f.category
                 }));
                 await supabase.from('financial_items').insert(financialsToInsert);
             }
