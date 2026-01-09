@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { User, Role } from '../types';
 import { supabase } from '../lib/supabaseClient';
 
@@ -20,36 +20,47 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const mountingRef = useRef(true);
 
+    // Initial Auth Check
     useEffect(() => {
-        // Verifica sessão atual ao carregar
-        checkSession();
+        let mounted = true;
 
-        // Escuta mudanças de auth
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            if (session?.user) {
-                await fetchProfile(session.user.id);
-            } else {
-                setCurrentUser(null);
-            }
-            setIsLoading(false);
-        });
-
-        return () => subscription.unsubscribe();
-    }, []);
-
-    const checkSession = async () => {
-        try {
+        const initializeAuth = async () => {
             const { data: { session } } = await supabase.auth.getSession();
+
             if (session?.user) {
-                await fetchProfile(session.user.id);
+                console.log("[Auth] Initial session found. Fetching profile...");
+                const success = await fetchProfile(session.user.id);
+                if (!success && mounted) {
+                    console.warn("[Auth] Session exists but profile download failed. Force signing out.");
+                    await supabase.auth.signOut();
+                    setCurrentUser(null);
+                }
+            } else {
+                if (mounted) setCurrentUser(null);
             }
-        } catch (error) {
-            console.error('Erro ao verificar sessão:', error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+            if (mounted) setIsLoading(false);
+
+            const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+                if (session?.user) {
+                    if (currentUser?.id !== session.user.id) {
+                        await fetchProfile(session.user.id);
+                    }
+                } else {
+                    setCurrentUser(null);
+                    setIsLoading(false);
+                }
+            });
+
+            return () => {
+                mounted = false;
+                subscription.unsubscribe();
+            };
+        };
+
+        initializeAuth();
+    }, []);
 
     const fetchProfile = async (userId: string): Promise<boolean> => {
         try {
@@ -59,11 +70,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 .eq('id', userId)
                 .single();
 
-            if (error) {
-                console.error('Erro ao buscar perfil:', error);
-                return false;
-            }
-
             if (data) {
                 setCurrentUser({
                     id: data.id,
@@ -72,71 +78,89 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                     avatarUrl: data.avatar_url,
                 });
                 return true;
+            } else {
+                console.error('Erro ao buscar perfil:', error);
+                return false;
             }
-            return false;
         } catch (error) {
-            console.error('Erro ao buscar perfil:', error);
+            console.error('Exception ao buscar perfil:', error);
             return false;
         }
     };
 
     const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
         try {
-            console.log('[Auth] Iniciando login para:', email);
-
-            // Timeout de segurança após 15 segundos
-            const timeoutPromise = new Promise<{ success: boolean; error?: string }>((_, reject) => {
-                setTimeout(() => reject(new Error('Tempo limite de conexão excedido (15s). Verifique sua internet ou se o backend está rodando.')), 15000);
+            setIsLoading(true);
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password,
             });
 
-            const loginPromise = (async () => {
-                console.log('[Auth] Chamando supabase.auth.signInWithPassword...');
-                const { data, error } = await supabase.auth.signInWithPassword({
-                    email,
-                    password,
-                });
+            if (error) {
+                setIsLoading(false);
+                return { success: false, error: 'Credenciais inválidas ou erro de conexão.' };
+            }
 
-                if (error) {
-                    console.error('[Auth] Erro no signInWithPassword:', error);
-                    return { success: false, error: error.message };
+            if (data.user) {
+                const profileSuccess = await fetchProfile(data.user.id);
+                setIsLoading(false);
+
+                if (profileSuccess) {
+                    return { success: true };
+                } else {
+                    await logout();
+                    return {
+                        success: false,
+                        error: 'Login efetuado, mas falha ao carregar perfil do usuário.'
+                    };
                 }
-
-                console.log('[Auth] Sucesso no signIn. User:', data.user?.id);
-
-                if (data.user) {
-                    // Fetch profile explicitamente
-                    console.log('[Auth] Buscando perfil explicitamente...');
-                    const profileSuccess = await fetchProfile(data.user.id);
-                    console.log('[Auth] Resultado fetchProfile:', profileSuccess);
-
-                    if (profileSuccess) {
-                        return { success: true };
-                    } else {
-                        // Se falhar ao buscar perfil, desloga para evitar estado inconsistente
-                        console.warn('[Auth] Perfil não encontrado. Deslogando...');
-                        await logout();
-                        return {
-                            success: false,
-                            error: 'Login realizado, mas erro ao carregar perfil. Verifique se o usuário possui registro na tabela profiles.'
-                        };
-                    }
-                }
-                return { success: false, error: 'Erro desconhecido: Usuário nulo.' };
-            })();
-
-            // Race entre login e timeout
-            return await Promise.race([loginPromise, timeoutPromise]);
+            }
+            setIsLoading(false);
+            return { success: false, error: 'Erro desconhecido.' };
 
         } catch (error: any) {
-            console.error('[Auth] Exception no login:', error);
-            return { success: false, error: error.message || 'Erro ao fazer login' };
+            setIsLoading(false);
+            return { success: false, error: error.message || 'Erro ao realizar login.' };
         }
     };
 
     const logout = async () => {
+        setIsLoading(true);
         await supabase.auth.signOut();
         setCurrentUser(null);
+        setIsLoading(false);
+        localStorage.removeItem('sb-tokens');
     };
+
+    // --- AUTO LOGOUT (3 Hours Inactivity) ---
+    useEffect(() => {
+        if (!currentUser) return; // Only monitor if logged in
+
+        const INACTIVITY_LIMIT = 3 * 60 * 60 * 1000; // 3 Hours in ms
+        let activityTimer: NodeJS.Timeout;
+
+        const resetTimer = () => {
+            if (activityTimer) clearTimeout(activityTimer);
+            activityTimer = setTimeout(() => {
+                console.warn('[Auth] Sessão expirada por inatividade (3h). Deslogando...');
+                logout();
+                alert('Sua sessão expirou por inatividade de 3 horas.');
+            }, INACTIVITY_LIMIT);
+        };
+
+        const events = ['mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
+        const handleActivity = () => resetTimer();
+
+        events.forEach(event => window.addEventListener(event, handleActivity));
+
+        // Start init
+        resetTimer();
+
+        return () => {
+            if (activityTimer) clearTimeout(activityTimer);
+            events.forEach(event => window.removeEventListener(event, handleActivity));
+        };
+    }, [currentUser]); // Note: In a real app we might wrap 'logout' in useCallback to safely include it in deps, but here this works as 'logout' reference is stable per render (closure).
 
     const value: AuthContextType = {
         currentUser,
