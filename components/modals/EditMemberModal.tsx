@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Shield, KeyRound, Check } from 'lucide-react';
+import { X, Save, Shield, KeyRound, Check, AlertTriangle } from 'lucide-react';
 import { User, Role } from '../../types';
 import { supabase } from '../../lib/supabaseClient';
 
@@ -44,17 +44,25 @@ const EditMemberModal: React.FC<EditMemberModalProps> = ({ isOpen, onClose, user
         }
     };
 
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
     const handlePasswordReset = async () => {
         if (!user.email) return;
         setResetLoading(true);
-        const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-            redirectTo: window.location.origin + '/reset-password', // Ensure this route exists or redirect to settings
-        });
-        setResetLoading(false);
-        if (!error) {
+        setErrorMsg(null);
+
+        try {
+            const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+                redirectTo: window.location.origin + '/reset-password',
+            });
+
+            if (error) throw error;
             setResetSent(true);
-        } else {
-            alert('Erro ao enviar email: ' + error.message);
+        } catch (error: any) {
+            console.error('Reset Password Error:', error);
+            setErrorMsg(error.message || 'Erro ao enviar email.');
+        } finally {
+            setResetLoading(false);
         }
     };
 
@@ -138,8 +146,13 @@ const EditMemberModal: React.FC<EditMemberModalProps> = ({ isOpen, onClose, user
                                 </button>
                             )}
                         </div>
-                        <p className="text-[10px] text-zinc-600 mt-1">O usuário receberá um link para criar uma nova senha.</p>
                     </div>
+                    {errorMsg && (
+                        <p className="text-[10px] text-red-500 font-bold mt-1 flex items-center gap-1">
+                            <AlertTriangle size={10} /> {errorMsg}
+                        </p>
+                    )}
+                    <p className="text-[10px] text-zinc-600 mt-1">O usuário receberá um link para criar uma nova senha.</p>
 
                     {/* Submit */}
                     <button

@@ -5,6 +5,7 @@ import { User } from '../types';
 import { useDraggableScroll } from '../hooks/useDraggableScroll';
 import AddMemberModal from '../components/modals/AddMemberModal';
 import EditMemberModal from '../components/modals/EditMemberModal';
+import ConfirmModal from '../components/ConfirmModal';
 import { useNotifications } from '../contexts/NotificationsContext';
 import { supabase } from '../lib/supabaseClient';
 import { createClient } from '@supabase/supabase-js';
@@ -22,6 +23,21 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
     const { addNotification } = useNotifications();
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingUser, setEditingUser] = useState<User | null>(null);
+
+    // Confirm Modal State
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        isDangerous?: boolean;
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => { },
+        isDangerous: false
+    });
 
     // Note: initialUsers comes from Props. We can't mutate props.
     // Ideally we should use AppDataContext `users` or a local state initialized from props.
@@ -92,32 +108,36 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
     };
 
     const handleDeleteMember = async (userId: string, userName: string) => {
-        if (!confirm(`Tem certeza que deseja remover ${userName}?`)) {
-            return;
-        }
+        setConfirmModal({
+            isOpen: true,
+            title: `Remover ${userName}?`,
+            message: `Tem certeza que deseja remover ${userName}?`,
+            isDangerous: true,
+            onConfirm: async () => {
+                try {
+                    const { error } = await supabase.from('profiles').delete().eq('id', userId);
 
-        try {
-            const { error } = await supabase.from('profiles').delete().eq('id', userId);
-
-            if (error) {
-                console.error("Delete error:", error);
-                addNotification({
-                    type: 'error',
-                    title: 'Erro ao remover',
-                    message: error.message
-                });
-            } else {
-                addNotification({
-                    type: 'success',
-                    title: 'Membro Removido',
-                    message: `${userName} foi removido da equipe.`
-                });
-                // Optional: window.location.reload(); 
+                    if (error) {
+                        console.error("Delete error:", error);
+                        addNotification({
+                            type: 'error',
+                            title: 'Erro ao remover',
+                            message: error.message
+                        });
+                    } else {
+                        addNotification({
+                            type: 'success',
+                            title: 'Membro Removido',
+                            message: `${userName} foi removido da equipe.`
+                        });
+                        // Optional: window.location.reload(); 
+                    }
+                } catch (err: any) {
+                    console.error("Delete exception:", err);
+                    addNotification({ type: 'error', title: 'Erro', message: 'Falha ao remover membro.' });
+                }
             }
-        } catch (err: any) {
-            console.error("Delete exception:", err);
-            addNotification({ type: 'error', title: 'Erro', message: 'Falha ao remover membro.' });
-        }
+        });
     };
 
     const handleUpdateMember = async (userId: string, data: Partial<User>): Promise<boolean> => {
@@ -276,6 +296,16 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
                 <div className="w-40 shrink-0"></div>
             </div>
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-cyan-900/5 via-transparent to-transparent pointer-events-none"></div>
+            {/* Confirm Modal */}
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                onConfirm={confirmModal.onConfirm}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                isDangerous={confirmModal.isDangerous}
+                confirmText="Confirmar"
+            />
         </div>
     );
 };

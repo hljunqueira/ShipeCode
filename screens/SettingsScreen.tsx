@@ -11,6 +11,7 @@ import {
 import AddMemberModal from '../components/modals/AddMemberModal';
 import EditMemberModal from '../components/modals/EditMemberModal';
 import { Organization, Role } from '../types';
+import ConfirmModal from '../components/ConfirmModal';
 import { useNotifications } from '../contexts/NotificationsContext';
 
 interface SettingsScreenProps {
@@ -22,7 +23,23 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
     const { isAdmin } = useAuth();
     const { updateOrganization } = useAppData();
     const [showAddModal, setShowAddModal] = useState(false);
-    const [editingUser, setEditingUser] = useState<any | null>(null); // Assuming 'any' for User type for now
+    const [editingUser, setEditingUser] = useState<any | null>(null);
+
+    // Confirm Modal State
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        isDangerous?: boolean;
+    }>({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => { },
+        isDangerous: false
+    });
+
     const { addNotification } = useNotifications();
     const [activeTab, setActiveTab] = useState('general');
 
@@ -54,12 +71,19 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
     };
 
     // System Actions
+    // System Actions
     const handleClearCache = () => {
-        if (confirm('Isso irá limpar os dados locais e recarregar a página. Deseja continuar?')) {
-            localStorage.clear();
-            sessionStorage.clear();
-            window.location.reload();
-        }
+        setConfirmModal({
+            isOpen: true,
+            title: 'Limpar Cache?',
+            message: 'Isso irá limpar os dados locais e recarregar a página. Deseja continuar?',
+            isDangerous: true,
+            onConfirm: () => {
+                localStorage.clear();
+                sessionStorage.clear();
+                window.location.reload();
+            }
+        });
     };
 
     // Team Management State
@@ -170,36 +194,40 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
     };
 
     const handleDeleteMember = async (userId: string, userName: string) => {
-        if (!confirm(`Tem certeza que deseja remover ${userName}? \n\nIsso removerá o acesso do usuário, mas a conta não será excluída do provedor de autenticação (requer ação no painel Supabase).`)) {
-            return;
-        }
+        setConfirmModal({
+            isOpen: true,
+            title: `Remover ${userName}?`,
+            message: `Tem certeza que deseja remover ${userName}? Isso removerá o acesso do usuário, mas a conta não será excluída do provedor de autenticação (requer ação no painel Supabase).`,
+            isDangerous: true,
+            onConfirm: async () => {
+                try {
+                    const { error } = await supabase.from('profiles').delete().eq('id', userId);
 
-        try {
-            const { error } = await supabase.from('profiles').delete().eq('id', userId);
-
-            if (error) {
-                console.error("Delete error:", error);
-                addNotification({
-                    type: 'error',
-                    title: 'Erro ao remover',
-                    message: error.message
-                });
-            } else {
-                addNotification({
-                    type: 'success',
-                    title: 'Membro Removido',
-                    message: `${userName} foi removido da equipe.`
-                });
-                fetchTeam();
+                    if (error) {
+                        console.error("Delete error:", error);
+                        addNotification({
+                            type: 'error',
+                            title: 'Erro ao remover',
+                            message: error.message
+                        });
+                    } else {
+                        addNotification({
+                            type: 'success',
+                            title: 'Membro Removido',
+                            message: `${userName} foi removido da equipe.`
+                        });
+                        fetchTeam();
+                    }
+                } catch (err: any) {
+                    console.error("Delete exception:", err);
+                    addNotification({
+                        type: 'error',
+                        title: 'Erro',
+                        message: 'Falha ao remover membro.'
+                    });
+                }
             }
-        } catch (err: any) {
-            console.error("Delete exception:", err);
-            addNotification({
-                type: 'error',
-                title: 'Erro',
-                message: 'Falha ao remover membro.'
-            });
-        }
+        });
     };
 
     const renderContent = () => {
@@ -409,6 +437,17 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
                     </div>
                 </div>
             </div>
+
+            {/* Confirm Modal */}
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                onConfirm={confirmModal.onConfirm}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                isDangerous={confirmModal.isDangerous}
+                confirmText={confirmModal.isDangerous ? 'Confirmar Remoção' : 'Confirmar'}
+            />
         </div>
     );
 };
