@@ -8,10 +8,9 @@ import {
     Users, Plus, Loader2, Monitor, DollarSign,
     Activity, RefreshCw, ArrowLeft, Save
 } from 'lucide-react';
-
-// ... interface SettingsScreenProps remains
-
-import { Organization } from '../types';
+import AddMemberModal from '../components/modals/AddMemberModal';
+import { Organization, Role } from '../types';
+import { useNotifications } from '../contexts/NotificationsContext';
 
 interface SettingsScreenProps {
     org: Organization;
@@ -21,10 +20,10 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
     const navigate = useNavigate();
     const { isAdmin } = useAuth();
     const { updateOrganization } = useAppData();
+    const { addNotification } = useNotifications();
     const [activeTab, setActiveTab] = useState('general');
 
     // Organization State
-    // "Identidade" removed. Keeping settings related state.
     const [currency, setCurrency] = useState(org.settings?.currency || 'BRL');
     const [taxRate, setTaxRate] = useState(org.settings?.taxRate || 0.15);
     const [saved, setSaved] = useState(false);
@@ -34,7 +33,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
         setIsSaving(true);
         try {
             await updateOrganization({
-                name: org.name, // Keep existing name
+                name: org.name,
                 settings: {
                     ...org.settings,
                     currency,
@@ -63,9 +62,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
     // Team Management State
     const [teamMembers, setTeamMembers] = useState<any[]>([]);
     const [isLoadingTeam, setIsLoadingTeam] = useState(false);
-    const [showAddUser, setShowAddUser] = useState(false);
-    const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'CONTRIBUTOR' });
-    const [isCreatingUser, setIsCreatingUser] = useState(false);
+    const [showAddUser, setShowAddUser] = useState(false); // Using Modal now
 
     // Fetch Team
     React.useEffect(() => {
@@ -77,77 +74,65 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
     const fetchTeam = async () => {
         setIsLoadingTeam(true);
         try {
-            console.log('Fetching team members...');
             const { data, error } = await supabase.from('profiles').select('*');
-
-            if (error) {
-                console.error('Error fetching team:', error);
-                alert('Erro ao carregar equipe: ' + error.message);
-                return;
-            }
-
-            console.log('Team data fetched:', data);
+            if (error) throw error;
             if (data) setTeamMembers(data);
-        } catch (err) {
-            console.error('Unexpected error fetching team:', err);
+        } catch (err: any) {
+            console.error('Error fetching team:', err);
+            addNotification({ type: 'error', title: 'Erro', message: 'Erro ao carregar equipe: ' + err.message });
         } finally {
             setIsLoadingTeam(false);
         }
     };
 
-    const handleCreateUser = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsCreatingUser(true);
-
+    // New Add Member Logic (Same as TeamScreen)
+    const handleAddMember = async (formData: any): Promise<boolean> => {
         try {
-            const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
-            const tempClient = createClient(
-                import.meta.env.VITE_SUPABASE_URL,
-                import.meta.env.VITE_SUPABASE_ANON_KEY,
-                {
-                    auth: {
-                        persistSession: false,
-                        autoRefreshToken: false,
-                        detectSessionInUrl: false
-                    }
-                }
-            );
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-            const { data, error } = await tempClient.auth.signUp({
-                email: newUser.email,
-                password: tempPassword,
-                options: {
-                    data: {
-                        name: newUser.name,
-                        role: newUser.role
-                    }
-                }
+            const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
+                auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
             });
 
-            if (error) throw error;
-
-            console.log('User created:', data);
-
-            const { error: resetError } = await tempClient.auth.resetPasswordForEmail(newUser.email, {
-                redirectTo: `${window.location.origin}/update-password`,
+            const { data: authData, error: authError } = await tempClient.auth.signUp({
+                email: formData.email,
+                password: formData.password,
+                options: { data: { full_name: formData.name } }
             });
 
-            if (resetError) {
-                console.warn('Error sending reset email (Invite):', resetError);
+            if (authError) {
+                addNotification({ type: 'error', title: 'Erro no Cadastro', message: authError.message });
+                return false;
             }
 
-            await new Promise(r => setTimeout(r, 1000));
+            if (!authData.user) return false;
 
-            fetchTeam();
-            setShowAddUser(false);
-            setNewUser({ name: '', email: '', password: '', role: 'CONTRIBUTOR' });
-            alert(`Convite enviado para ${newUser.email}!`);
+            const { error: profileError } = await supabase.from('profiles').insert([{
+                id: authData.user.id,
+                name: formData.name,
+                email: formData.email,
+                role: formData.role,
+                avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&background=random`
+            }]);
 
-        } catch (error: any) {
-            console.error('Error creating user:', error);
-            alert('Erro ao convidar: ' + error.message);
-        } finally {
-            setIsCreatingUser(false);
+            if (profileError) {
+                addNotification({
+                    type: 'warning',
+                    title: 'Usuário Criado (Parcial)',
+                    message: `Conta criada, mas perfil falhou: ${profileError.message}`
+                });
+                fetchTeam(); // Refresh anyway
+                return true;
+            }
+
+            addNotification({ type: 'success', title: 'Membro Adicionado', message: `${formData.name} entrou para a equipe.` });
+            fetchTeam(); // Refresh list
+            return true;
+
+        } catch (err: any) {
+            addNotification({ type: 'error', title: 'Erro Inesperado', message: err.message });
+            return false;
         }
     };
 
@@ -156,8 +141,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
             case 'general':
                 return (
                     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-
-                        {/* 1. Configurações Financeiras (Merged into General) */}
+                        {/* Configurações Financeiras */}
                         <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8">
                             <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                                 <DollarSign size={18} /> Configurações Financeiras
@@ -188,7 +172,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
                             </div>
                         </div>
 
-                        {/* 2. Integridade do Sistema (Merged into General) */}
+                        {/* Integridade do Sistema */}
                         <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8">
                             <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                                 <Activity size={18} /> Integridade do Sistema
@@ -209,7 +193,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
                                 <div className="flex justify-between items-center p-4 bg-zinc-950 rounded-lg border border-zinc-800">
                                     <div>
                                         <p className="text-sm font-bold text-white">Versão da API</p>
-                                        <p className="text-xs text-zinc-500">v2.4.0 (Stable Channel)</p>
+                                        <p className="text-xs text-zinc-500">v2.5.0 (ShipeCode OS)</p>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
@@ -229,117 +213,12 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
                                     <Users size={18} /> Gestão da Equipe
                                 </h2>
                                 <button
-                                    onClick={() => setShowAddUser(!showAddUser)}
+                                    onClick={() => setShowAddUser(true)}
                                     className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors"
                                 >
                                     <Plus size={14} /> Novo Usuário
                                 </button>
                             </div>
-
-                            {/* Invite Modal */}
-                            {showAddUser && (
-                                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-                                    <div className="bg-zinc-950 w-full max-w-md rounded-2xl border border-zinc-800 shadow-2xl p-6 relative animate-in zoom-in-95 duration-200">
-                                        <button
-                                            onClick={() => setShowAddUser(false)}
-                                            className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors"
-                                        >
-                                            <Plus size={24} className="rotate-45" />
-                                        </button>
-
-                                        <div className="mb-6">
-                                            <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4 text-emerald-500 border border-emerald-500/20">
-                                                <Users size={24} />
-                                            </div>
-                                            <h3 className="text-xl font-bold text-white">Convidar Membro</h3>
-                                            <p className="text-sm text-zinc-400">Adicione novos membros à equipe por e-mail.</p>
-                                        </div>
-
-                                        <form onSubmit={handleCreateUser} className="space-y-4">
-                                            <div className="space-y-2">
-                                                <label className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Nome</label>
-                                                <input
-                                                    required
-                                                    placeholder="Nome do membro"
-                                                    value={newUser.name}
-                                                    onChange={e => setNewUser({ ...newUser, name: e.target.value })}
-                                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm text-white focus:ring-1 focus:ring-emerald-500 outline-none transition-all placeholder:text-zinc-600"
-                                                />
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <label className="text-xs font-mono text-zinc-500 uppercase tracking-widest">E-mail</label>
-                                                <input
-                                                    required
-                                                    type="email"
-                                                    placeholder="email@exemplo.com"
-                                                    value={newUser.email}
-                                                    onChange={e => setNewUser({ ...newUser, email: e.target.value })}
-                                                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-sm text-white focus:ring-1 focus:ring-emerald-500 outline-none transition-all placeholder:text-zinc-600"
-                                                />
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <label className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Função</label>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    {[
-                                                        { id: 'ADMIN', label: 'Administrador', desc: 'Acesso total ao sistema' },
-                                                        { id: 'MANAGER', label: 'Gerente', desc: 'Gerencia projetos e equipe' },
-                                                        { id: 'CONTRIBUTOR', label: 'Colaborador', desc: 'Trabalha em tarefas' },
-                                                        { id: 'CLIENT', label: 'Cliente', desc: 'Visualiza seus projetos' }
-                                                    ].map((role) => (
-                                                        <div
-                                                            key={role.id}
-                                                            onClick={() => setNewUser({ ...newUser, role: role.id })}
-                                                            className={`p-3 rounded-lg border cursor-pointer transition-all ${newUser.role === role.id
-                                                                ? 'bg-emerald-500/10 border-emerald-500/50'
-                                                                : 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700'
-                                                                }`}
-                                                        >
-                                                            <div className={`text-xs font-bold mb-0.5 ${newUser.role === role.id ? 'text-emerald-400' : 'text-zinc-300'}`}>
-                                                                {role.label}
-                                                            </div>
-                                                            <div className="text-[10px] text-zinc-500 leading-tight">
-                                                                {role.desc}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            <div className="pt-4 space-y-4">
-                                                <button
-                                                    type="submit"
-                                                    disabled={isCreatingUser}
-                                                    className="w-full bg-white hover:bg-zinc-200 text-black px-4 py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                    {isCreatingUser ? (
-                                                        <><Loader2 size={16} className="animate-spin" /> Enviando...</>
-                                                    ) : (
-                                                        <><Monitor size={16} /> Enviar Convite</>
-                                                    )}
-                                                </button>
-
-                                                <div className="relative">
-                                                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-zinc-800"></div></div>
-                                                    <div className="relative flex justify-center text-xs uppercase"><span className="bg-zinc-950 px-2 text-zinc-600">ou compartilhe o link</span></div>
-                                                </div>
-
-                                                <div className="flex gap-2">
-                                                    <input
-                                                        readOnly
-                                                        value="https://shipecode.app/invite/MTc2Nzk" // Mock for UI
-                                                        className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-500 font-mono"
-                                                    />
-                                                    <button type="button" className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-white text-xs font-bold flex items-center gap-2 transition-colors">
-                                                        <Save size={14} /> Copiar
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </form>
-                                    </div>
-                                </div>
-                            )}
 
                             {/* Team List */}
                             <div className="space-y-4">
@@ -381,6 +260,13 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
             <div className="absolute inset-0 pointer-events-none">
                 <div className="absolute -top-[20%] -left-[10%] w-[800px] h-[800px] bg-red-600/5 rounded-full blur-3xl"></div>
             </div>
+
+            {/* Add Member Modal */}
+            <AddMemberModal
+                isOpen={showAddUser}
+                onClose={() => setShowAddUser(false)}
+                onAdd={handleAddMember}
+            />
 
             {/* Immersive Header */}
             <div className="absolute top-0 left-0 w-full p-6 z-20 flex justify-between items-center bg-gradient-to-b from-zinc-950 to-transparent pointer-events-auto">
