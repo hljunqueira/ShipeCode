@@ -44,6 +44,7 @@ const TeamScreen: React.FC<TeamScreenProps> = ({ users: initialUsers }) => {
 
             if (authError) {
                 console.error("Auth Error:", authError);
+                alert(`Erro no Cadastro: ${authError.message}`); // Force alert
                 addNotification({
                     type: 'error',
                     title: 'Erro no Cadastro',

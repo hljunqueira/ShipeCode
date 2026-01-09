@@ -102,6 +102,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
             });
 
             if (authError) {
+                console.error("Auth Error:", authError);
+                alert(`Erro no Cadastro: ${authError.message}`); // Force alert for visibility
                 addNotification({ type: 'error', title: 'Erro no Cadastro', message: authError.message });
                 return false;
             }
@@ -117,10 +119,13 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
             }]);
 
             if (profileError) {
+                const msg = `Conta criada, mas perfil falhou: ${profileError.message}`;
+                console.error(msg);
+                alert(msg); // Force alert
                 addNotification({
                     type: 'warning',
                     title: 'Usuário Criado (Parcial)',
-                    message: `Conta criada, mas perfil falhou: ${profileError.message}`
+                    message: msg
                 });
                 fetchTeam(); // Refresh anyway
                 return true;
