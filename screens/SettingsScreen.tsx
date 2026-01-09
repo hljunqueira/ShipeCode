@@ -307,15 +307,15 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <div className="text-right mr-4">
+                                                <div className="text-right mr-4 hidden sm:block">
                                                     <div className="text-sm font-mono text-zinc-600">
-                                                        {member.id.substring(0, 8)}...
+                                                        ID: {member.id.substring(0, 4)}
                                                     </div>
                                                 </div>
 
                                                 <button
                                                     onClick={() => setEditingUser(member)}
-                                                    className="p-2 text-zinc-500 hover:text-cyan-500 hover:bg-zinc-900 rounded-lg transition-colors"
+                                                    className="p-2 bg-zinc-900 border border-zinc-700 text-cyan-500 hover:bg-cyan-500 hover:text-white rounded-lg transition-all"
                                                     title="Editar Membro"
                                                 >
                                                     <Edit2 size={16} />
@@ -324,7 +324,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
                                                 {isAdmin && (
                                                     <button
                                                         onClick={() => handleDeleteMember(member.id, member.name)}
-                                                        className="text-zinc-600 hover:text-red-500 transition-colors p-2 rounded-md hover:bg-zinc-900"
+                                                        className="p-2 bg-zinc-900 border border-zinc-700 text-zinc-500 hover:text-red-500 hover:border-red-500 hover:bg-red-500/10 rounded-lg transition-all"
                                                         title="Remover Membro"
                                                     >
                                                         <Trash2 size={16} />
@@ -377,16 +377,9 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ org }) => {
                         <p className="text-xs text-zinc-500 font-mono mt-0.5">{org.name}</p>
                     </div>
                 </div>
-                <button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className={`pointer-events-auto px-5 py-2.5 rounded-full text-sm font-bold flex items-center gap-2 transition-all ${saved
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)]'
-                        }`}
-                >
-                    <Save size={16} /> {saved ? 'Salvo!' : isSaving ? 'Salvando...' : 'Salvar Alterações'}
-                </button>
+                <div className="flex gap-2">
+                    {/* Removed Global Save Button */}
+                </div>
             </div>
 
             {/* Scrollable Content */}

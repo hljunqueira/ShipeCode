@@ -282,7 +282,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ projects, leads, users 
                             <Users size={20} className="text-zinc-500" />
                             Equipe
                         </h3>
-                        <Link to="/settings" className="text-xs text-zinc-500 hover:text-white flex items-center gap-1 transition-colors">
+                        <Link to="/team" className="text-xs text-zinc-500 hover:text-white flex items-center gap-1 transition-colors">
                             Gerenciar <ChevronRight size={12} />
                         </Link>
                     </div>
@@ -338,7 +338,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ projects, leads, users 
                                 <span className="text-sm font-medium text-zinc-300">Novo Lead</span>
                             </Link>
 
-                            <Link to="/settings" className="p-4 bg-zinc-950/50 rounded-xl border border-zinc-800 hover:border-cyan-500/50 flex flex-col items-center text-center gap-3">
+                            <Link to="/team" className="p-4 bg-zinc-950/50 rounded-xl border border-zinc-800 hover:border-cyan-500/50 flex flex-col items-center text-center gap-3">
                                 <div className="p-3 bg-cyan-500/10 rounded-lg text-cyan-500">
                                     <Users size={20} />
                                 </div>
