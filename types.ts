@@ -27,6 +27,9 @@ export interface User {
   name: string;
   role: Role;
   avatarUrl?: string;
+  email?: string;
+  githubUrl?: string;
+  linkedinUrl?: string;
 }
 
 export interface Organization {
@@ -47,8 +50,9 @@ export interface Lead {
   budget: number;
   probability: number; // 0-100
   status: 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'CONVERTED' | 'LOST';
-  source?: 'MANUAL' | 'CAMPAIGN_LINKEDIN' | 'CAMPAIGN_ADS' | 'REFERRAL';
+  source?: 'MANUAL' | 'CAMPAIGN_LINKEDIN' | 'CAMPAIGN_ADS' | 'REFERRAL' | 'WEBSITE';
   createdAt: string;
+  notes?: string;
 }
 
 export interface Contract {
@@ -73,6 +77,8 @@ export interface Task {
   status: TaskStatus;
   assigneeId?: string;
   dueDate?: string;
+  description?: string;
+  priority?: 'low' | 'medium' | 'high';
 }
 
 export interface Project {
@@ -88,4 +94,30 @@ export interface Project {
   financials: FinancialItem[];
   tasks: Task[];
   teamIds: string[];
+}
+
+export interface Expense {
+  id: string;
+  description: string;
+  amount: number;
+  category: 'SALARY' | 'SOFTWARE' | 'MARKETING' | 'OFFICE' | 'OTHER';
+  date: string;
+}
+
+export interface WorkLog {
+  id: string;
+  profile_id: string;
+  project_id?: string;
+  hours_worked: number;
+  tasks_completed: number;
+  efficiency_score: number;
+  log_date: string;
+  notes?: string;
+}
+
+export interface KpiTarget {
+  id: string;
+  metric_name: string;
+  target_value: number;
+  period: string;
 }
